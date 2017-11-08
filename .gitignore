@@ -1,5 +1,6 @@
 *.bak
 *.log
+*.avrsuo
 [Bb]in
 [Dd]ebug*/
 [Rr]elease*/
