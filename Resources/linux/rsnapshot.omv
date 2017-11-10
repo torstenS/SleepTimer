@@ -1,0 +1,2 @@
+#!/bin/bash
+rsync omv:: | awk '{printf "backup\trsync://omv/%s/\tomv/%s/\n", $1, $1}'

@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "testing failed rsnapshot exit code 20"
+exit 20

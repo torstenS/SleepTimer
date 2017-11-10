@@ -1,0 +1,95 @@
+#!/bin/bash
+
+CONF_FILE=/etc/rsnapshot.conf
+EXECUTION_TIME="02:00"
+
+if [ $# -lt 1 ]
+then
+  echo "Usage: $0 interval1:dateformat1 interval2:dateformat2 ..." >&2
+  echo >&2
+  echo "  Where intervaln is an rsnapshot retain interval and dateformatn is a" >&2
+  echo "  format letter to be passed to date. If the intervaln.0 ctime formatted" >&2
+  echo "  with dateformatn differs to the current date formatted with dateformatn" >&2
+  echo "  the backup will be run." >&2
+  echo >&2
+  echo "  E.g.: $0 monthly:m weekly:W daily:j" >&2
+  echo >&2
+  echo "  If any of the rsnapshot intervalls are executed the system">&2
+  echo "  is shutdown. The special interval shutdown will do this even">&2
+  echo "  if no snapshot has been taken.">&2
+  exit 1
+fi
+
+snapshot_root=`awk -F $'\t' '/^snapshot_root\t/ { print $2 }' "$CONF_FILE"`
+
+if [ -z "$snapshot_root" ]
+then
+  echo "Could not find snapshot_root option in $CONF_FILE" >&2
+  exit 1
+fi
+
+now=`date +%s`
+shutdown=0
+ok="0"
+run=0
+error=0
+
+for spec in "$@"
+do
+  if [ $spec == "shutdown" ]
+  then
+    shutdown=1
+    continue
+  fi
+
+  interval=${spec%:*}
+  format=${spec#*:*}
+  current="$snapshot_root/$interval.0"
+  run=0
+  error=0
+
+  if [ ! -d "$current" ]
+  then
+    echo "No $interval.0 directory found"
+    run=1
+  else
+    ctime=`stat --format=%Z "$snapshot_root/$interval.0"`
+    ctime_formatted=`date "-d@$ctime" "+%$format"`
+    now_formatted=`date "-d@$now" "+%$format"`
+
+    if [ "$ctime_formatted" -ne "$now_formatted" ]
+    then
+      echo "Formatted change time of $interval.0 ($ctime_formatted) does not match current time ($now_formatted)"
+      run=1
+    else
+      echo "Formatted change time of $interval.0 ($ctime_formatted) matches current time"
+    fi
+  fi
+
+  if [ $run -eq 1 ]
+  then
+    echo "Running rsnapshot $interval"
+    rsnapshot -c "$CONF_FILE" "$interval" || error=$?
+#    /root/fail-rsnapshot || error=$?
+  else
+    echo "Skipping rsnapshot $interval"
+  fi
+  if [ $error -ne 0 ]
+  then
+    echo "Rsnapshot failed with exit code $error"
+    ok="1"
+    break
+  fi
+done
+if [ $run -eq 1 ] || [ $shutdown -eq 1 ]
+then
+  startTime=$(date +%s)
+  endTime=$(date -d "$EXECUTION_TIME tomorrow" +%s)
+  timeToWait=$(( ($endTime- $startTime) / 60 ))
+  echo "SLEEPTIME ${timeToWait}min:$ok" > /dev/kmsg
+  shutdown -h -P +1 "BACKUP done NEXT in $timeToWait minutes" &
+else
+  echo "Nothing done. Assuming manual start. Staying on..."
+fi
+exit $error
+

@@ -1,0 +1,4 @@
+#!/bin/bash
+
+/root/run-rsnapshot shutdown
+exec /bin/bash

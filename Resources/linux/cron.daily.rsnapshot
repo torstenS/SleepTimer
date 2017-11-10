@@ -1,0 +1,2 @@
+#!/bin/sh
+/root/run-rsnapshot monthly:m weekly:W daily:j
